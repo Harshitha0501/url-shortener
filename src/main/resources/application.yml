@@ -1,0 +1,81 @@
+spring:
+  application:
+    name: url-shortener
+
+  datasource:
+    url: ${MYSQL_URL:jdbc:mysql://localhost:3306/urlshortener?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${MYSQL_USER:urlshortener}
+    password: ${MYSQL_PASSWORD:urlshortener}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+        jdbc:
+          time_zone: UTC
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    timeout: 2000ms
+    jedis:
+      pool:
+        max-active: 32
+        max-idle: 16
+        min-idle: 4
+
+  cache:
+    type: redis
+
+server:
+  port: ${SERVER_PORT:8080}
+  compression:
+    enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when_authorized
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+  api-docs:
+    path: /v3/api-docs
+
+logging:
+  level:
+    root: INFO
+    com.emergent.urlshortener: INFO
+
+app:
+  base-url: ${APP_BASE_URL:http://localhost:8080}
+  cache:
+    ttl-seconds: ${APP_CACHE_TTL_SECONDS:3600}
+  rate-limit:
+    enabled: ${APP_RATE_LIMIT_ENABLED:true}
+    capacity: ${APP_RATE_LIMIT_CAPACITY:20}
+    refill-tokens: ${APP_RATE_LIMIT_REFILL:20}
+    refill-period-seconds: ${APP_RATE_LIMIT_PERIOD:60}
+  geoip:
+    database-path: ${GEOIP_DB_PATH:}
+  expiry:
+    cleanup-cron: ${APP_EXPIRY_CRON:0 0 * * * *}
