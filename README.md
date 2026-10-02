@@ -1,5 +1,9 @@
 # URL Shortener with Analytics
 
+<p align="center">
+  <img src="./url-shortener-banner.png" alt="URL Shortener with Analytics">
+</p>
+
 A backend-focused URL Shortener built with **Java 8, Spring Boot 2.7.18, MySQL 8, Redis, Maven, and Docker Compose**.
 
 The project provides REST APIs for creating short URLs, custom aliases, expiry dates, redirects, click tracking, analytics, rate limiting, Swagger/OpenAPI documentation, and scheduled cleanup of expired links.
