@@ -1,293 +1,744 @@
 # URL Shortener with Analytics
 
-A **scalable URL shortener** built with **Java 8 + Spring Boot 2.7 + MySQL 8 + Redis**.
-Focused backend project demonstrating REST API design, relational persistence,
-Redis caching, distributed rate limiting and click analytics.
+A backend-focused URL Shortener built with **Java 8, Spring Boot 2.7.18, MySQL 8, Redis, Maven, and Docker Compose**.
+
+The project provides REST APIs for creating short URLs, custom aliases, expiry dates, redirects, click tracking, analytics, rate limiting, Swagger/OpenAPI documentation, and scheduled cleanup of expired links.
+
+> **Current implementation note:** Redis is used for distributed rate limiting and Redis infrastructure is included in the project. Spring Cache-based URL mapping caching is currently disabled on the redirect lookup path to avoid serialization/type-mapping issues with cached `UrlMapping` objects.
 
 ---
 
 ## Features
 
-- **Shorten URL** — `POST /api/urls` (auto-generated Base62 code, 7 chars)
-- **Custom aliases** — pass `customAlias` in the shorten request
-- **Expiry dates** — pass `expiresAt` (ISO-8601); expired links return `410 Gone`
-- **Redirect + click tracking** — `GET /{shortCode}` → HTTP 302
-- **Click analytics** — device / browser / OS / country / referrer breakdown
-  plus the last 100 raw click events (`GET /api/analytics/{shortCode}`)
-- **Redis caching** — `shortCode → longUrl` cached with TTL for hot-path redirects
-- **Redis-backed distributed rate limiting** — Bucket4j, per-IP, on the shorten endpoint
-- **Async click persistence** — redirects respond immediately, analytics recorded async
-- **Automatic expiry cleanup** — cron job purges expired links
-- **Swagger UI / OpenAPI 3** — interactive docs at `/swagger-ui.html`
-- **Flyway migrations** — versioned SQL under `src/main/resources/db/migration`
-- **Actuator** — `/actuator/health`, `/actuator/prometheus`, etc.
+- Create short URLs from long URLs
+- Generate unique Base62 short codes
+- Create custom aliases
+- Validate custom aliases and prevent duplicates
+- Optional URL expiry dates
+- Redirect short URLs using HTTP `302`
+- Track redirect click counts
+- View URL details and analytics
+- Record recent click information asynchronously
+- Redis-backed distributed rate limiting
+- Automatic cleanup of expired URL records
+- MySQL persistence using Spring Data JPA
+- Database versioning with Flyway
+- Swagger/OpenAPI 3 documentation
+- Spring Boot Actuator support
+- Docker and Docker Compose support
+- Optional MaxMind GeoIP2 integration for location-related click information
 
 ---
 
 ## Tech Stack
 
-| Layer                  | Choice                                          |
-|------------------------|-------------------------------------------------|
-| Language               | Java 8                                          |
-| Framework              | Spring Boot 2.7.18                              |
-| Persistence            | Spring Data JPA + MySQL 8 + Flyway              |
-| Caching                | Spring Cache + Redis (Lettuce)                  |
-| Rate limiting          | Bucket4j + Redis (Jedis)                        |
-| API docs               | springdoc-openapi 1.7 (Swagger UI)              |
-| User-Agent parsing     | Yauaa 7.x                                       |
-| Geo lookup             | MaxMind GeoIP2 (optional GeoLite2-City DB)      |
-| Build                  | Maven                                           |
+### Backend
+- Java 8
+- Spring Boot 2.7.18
+- Spring Web
+- Spring Data JPA
+- Spring Security
+- Hibernate
+- Maven
+
+### Database
+- MySQL 8
+- Flyway migrations
+
+### Caching / Rate Limiting
+- Redis
+- Lettuce
+- Jedis
+- Bucket4j
+
+### Documentation
+- Swagger / OpenAPI 3
+- Springdoc OpenAPI
+
+### Other
+- Docker
+- Docker Compose
+- Spring Boot Actuator
+- Yauaa for User-Agent parsing
+- MaxMind GeoIP2 for optional GeoIP support
 
 ---
 
-## Quick Start (Docker Compose — recommended)
+## Project Architecture
 
-Requires Docker + Docker Compose.
+```text
+Client
+  |
+  | HTTP Request
+  v
+Spring Boot Application
+  |
+  +--------------------+
+  |                    |
+  v                    v
+REST Controllers     Rate Limiting
+  |                    |
+  v                    v
+Service Layer        Redis
+  |
+  +--------------------+
+  |                    |
+  v                    v
+MySQL / JPA        Click Tracking
+  |
+  v
+Flyway Migrations
+```
+
+---
+
+## Main API Endpoints
+
+### 1. Create Short URL
+
+**POST**
+
+```text
+/api/urls
+```
+
+Example request:
+
+```json
+{
+  "url": "https://github.com"
+}
+```
+
+Example response:
+
+```json
+{
+  "shortCode": "k4tsfOh",
+  "shortUrl": "http://localhost:8080/k4tsfOh",
+  "longUrl": "https://github.com",
+  "createdAt": "2026-10-02T10:08:54.097Z",
+  "expiresAt": null,
+  "clickCount": 0,
+  "customAlias": false
+}
+```
+
+---
+
+### 2. Create a Custom Alias
+
+A custom alias can be supplied when creating a short URL.
+
+Example:
+
+```json
+{
+  "url": "https://www.google.com",
+  "customAlias": "mygoogle"
+}
+```
+
+The resulting short URL is:
+
+```text
+http://localhost:8080/mygoogle
+```
+
+---
+
+### 3. Redirect Short URL
+
+**GET**
+
+```text
+/{shortCode}
+```
+
+Example:
+
+```text
+GET /mygoogle
+```
+
+The application returns an HTTP `302` redirect to the original URL.
+
+Example:
+
+```text
+HTTP/1.1 302
+Location: https://www.google.com
+```
+
+---
+
+### 4. Get URL Details
+
+**GET**
+
+```text
+/api/urls/{shortCode}
+```
+
+Example:
+
+```text
+GET /api/urls/mygoogle
+```
+
+Example response:
+
+```json
+{
+  "shortCode": "mygoogle",
+  "shortUrl": "http://localhost:8080/mygoogle",
+  "longUrl": "https://www.google.com",
+  "createdAt": "2026-10-02T09:20:04.882Z",
+  "expiresAt": null,
+  "clickCount": 3,
+  "customAlias": true
+}
+```
+
+---
+
+### 5. Get Analytics
+
+**GET**
+
+```text
+/api/analytics/{shortCode}
+```
+
+This endpoint provides analytics and recent click information for a short URL.
+
+Analytics can include information such as:
+
+- Total clicks
+- Recent clicks
+- Timestamp information
+- User-Agent information
+- Referrer information
+- IP-related information when available
+- Optional GeoIP information when GeoIP is configured
+
+---
+
+### 6. Delete a Short URL
+
+**DELETE**
+
+```text
+/api/urls/{shortCode}
+```
+
+Example:
+
+```text
+DELETE /api/urls/mygoogle
+```
+
+The URL mapping is removed from the database.
+
+---
+
+## Swagger / OpenAPI
+
+Swagger UI is available when the application is running:
+
+```text
+http://localhost:8080/swagger-ui/index.html
+```
+
+OpenAPI JSON:
+
+```text
+http://localhost:8080/v3/api-docs
+```
+
+Swagger provides an interactive way to test the available REST APIs.
+
+Current documented endpoints include:
+
+```text
+POST   /api/urls
+GET    /api/urls/{shortCode}
+GET    /api/analytics/{shortCode}
+DELETE /api/urls/{shortCode}
+GET    /{shortCode}
+```
+
+---
+
+## Running the Project with Docker Compose
+
+### Prerequisites
+
+Install:
+
+- Docker Desktop
+- Git
+
+Docker Compose is included with current Docker Desktop installations.
+
+---
+
+### Start the Application
+
+From the project root:
 
 ```bash
 docker compose up --build
 ```
 
-The stack exposes:
+This starts:
 
-- App:     http://localhost:8080
-- Swagger: http://localhost:8080/swagger-ui.html
-- MySQL:   localhost:3306 (user `urlshortener`, password `urlshortener`)
-- Redis:   localhost:6379
-
-Stop with `Ctrl+C`, remove volumes with `docker compose down -v`.
+- Spring Boot application
+- MySQL
+- Redis
 
 ---
 
-## Quick Start (Local, without Docker)
+### Services
 
-1. Install **Java 8**, **Maven 3.6+**, **MySQL 8**, **Redis 6/7**.
-2. Create the database:
-   ```sql
-   CREATE DATABASE urlshortener CHARACTER SET utf8mb4;
-   CREATE USER 'urlshortener'@'%' IDENTIFIED BY 'urlshortener';
-   GRANT ALL PRIVILEGES ON urlshortener.* TO 'urlshortener'@'%';
-   FLUSH PRIVILEGES;
-   ```
-3. Copy `.env.example` → `.env` and edit values if needed (or export the vars).
-4. Run:
-   ```bash
-   mvn spring-boot:run
-   ```
+| Service | Host Port | Container Port |
+|---|---:|---:|
+| Spring Boot App | 8080 | 8080 |
+| MySQL | 3307 | 3306 |
+| Redis | 6379 | 6379 |
 
-Flyway will apply `V1__init.sql` automatically on first startup.
+The MySQL container uses port `3306` internally, while the host exposes it on `3307`.
 
 ---
 
-## API Reference
-
-Full interactive spec at **`/swagger-ui.html`**. OpenAPI JSON at **`/v3/api-docs`**.
-
-### 1. Shorten a URL
+### Run in Detached Mode
 
 ```bash
-curl -X POST http://localhost:8080/api/urls \
-  -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://www.example.com/some/very/long/path?with=params",
-    "customAlias": "my-link",
-    "expiresAt": "2026-12-31T23:59:59Z"
-  }'
+docker compose up -d --build
 ```
-
-Response `201 Created`:
-
-```json
-{
-  "shortCode": "my-link",
-  "shortUrl":  "http://localhost:8080/my-link",
-  "longUrl":   "https://www.example.com/some/very/long/path?with=params",
-  "createdAt": "2026-01-15T10:00:00Z",
-  "expiresAt": "2026-12-31T23:59:59Z",
-  "clickCount": 0,
-  "customAlias": true
-}
-```
-
-`customAlias` and `expiresAt` are optional. Without a custom alias, a 7-char
-Base62 code is generated.
-
-### 2. Redirect
-
-```bash
-curl -I http://localhost:8080/my-link
-# HTTP/1.1 302
-# Location: https://www.example.com/some/very/long/path?with=params
-```
-
-### 3. Analytics
-
-```bash
-curl http://localhost:8080/api/analytics/my-link
-```
-
-```json
-{
-  "shortCode": "my-link",
-  "longUrl": "https://www.example.com/...",
-  "totalClicks": 42,
-  "byDevice":   { "Desktop": 30, "Phone": 12 },
-  "byBrowser":  { "Chrome": 25, "Safari": 12, "Firefox": 5 },
-  "byOs":       { "Mac OS": 20, "Windows": 10, "iOS": 12 },
-  "byCountry":  { "US": 22, "DE": 10, "IN": 10 },
-  "byReferrer": { "direct": 30, "https://twitter.com": 12 },
-  "recentClicks": [ /* last 100 events */ ]
-}
-```
-
-### 4. Get short link metadata
-
-```bash
-curl http://localhost:8080/api/urls/my-link
-```
-
-### 5. Delete a short link
-
-```bash
-curl -X DELETE http://localhost:8080/api/urls/my-link
-```
-
-### Error responses
-
-| Status | When                                               |
-|--------|----------------------------------------------------|
-| 400    | Invalid URL / bad request / validation error       |
-| 404    | Short code not found                               |
-| 409    | Custom alias already taken or reserved             |
-| 410    | Short link has expired                             |
-| 429    | Rate limit exceeded (per client IP)                |
 
 ---
 
-## Configuration
-
-All configuration is env-driven (see `.env.example`).
-
-| Variable                    | Default                                        | Purpose                          |
-|-----------------------------|------------------------------------------------|----------------------------------|
-| `SERVER_PORT`               | `8080`                                         | HTTP port                        |
-| `APP_BASE_URL`              | `http://localhost:8080`                        | Used to build `shortUrl` field   |
-| `MYSQL_URL`                 | `jdbc:mysql://localhost:3306/urlshortener...`  | JDBC URL                         |
-| `MYSQL_USER` / `PASSWORD`   | `urlshortener` / `urlshortener`                | DB creds                         |
-| `REDIS_HOST` / `PORT`       | `localhost` / `6379`                           | Redis connection                 |
-| `REDIS_PASSWORD`            | *(empty)*                                      | Optional Redis auth              |
-| `APP_CACHE_TTL_SECONDS`     | `3600`                                         | TTL for cached URL mappings      |
-| `APP_RATE_LIMIT_ENABLED`    | `true`                                         | Toggle rate limiting             |
-| `APP_RATE_LIMIT_CAPACITY`   | `20`                                           | Bucket capacity per IP           |
-| `APP_RATE_LIMIT_REFILL`     | `20`                                           | Tokens per refill window         |
-| `APP_RATE_LIMIT_PERIOD`     | `60`                                           | Refill period in seconds         |
-| `GEOIP_DB_PATH`             | *(empty)*                                      | Path to GeoLite2-City.mmdb       |
-| `APP_EXPIRY_CRON`           | `0 0 * * * *` (every hour)                     | Expired-link cleanup schedule    |
-
----
-
-## GeoIP Setup (optional)
-
-Geo lookups gracefully degrade to `"Unknown"` if the DB is missing.
-
-To enable:
-
-1. Sign up (free) at <https://www.maxmind.com/en/geolite2/signup>.
-2. Download **GeoLite2-City.mmdb**.
-3. Mount / place the file, then set:
-   ```
-   GEOIP_DB_PATH=/absolute/path/to/GeoLite2-City.mmdb
-   ```
-4. Restart the app.
-
----
-
-## Architecture Notes
-
-- **Redirect hot path** (`GET /{code}`) hits Redis first (`@Cacheable`). On a hit
-  we avoid MySQL entirely, then fire off async click recording so the redirect
-  responds in single-digit milliseconds.
-- **Click counter** is a `UPDATE ... SET click_count = click_count + 1` — safe
-  under concurrent load. Detailed analytics live in a separate `click_event`
-  table so heavy read queries don't lock hot paths.
-- **Custom aliases** and generated codes share the same unique index. A
-  small collision-retry loop guards against birthday collisions for random codes.
-- **Rate limiting** is Redis-backed via Bucket4j, so limits work correctly
-  across multiple app instances. Applied only to `POST /api/urls` — redirects
-  are intentionally NOT rate limited so short links stay fast for real users.
-- **Expiry** is enforced at read-time (`410 Gone`) and swept periodically by a
-  scheduled cleanup job.
-
----
-
-## Load / Performance Testing
-
-Any HTTP load tool works. Example with **k6**:
-
-```js
-// smoke.js
-import http from 'k6/http';
-import { check } from 'k6';
-
-export const options = { vus: 200, duration: '30s' };
-
-export default function () {
-  const res = http.get('http://localhost:8080/my-link', { redirects: 0 });
-  check(res, { 'is 302': (r) => r.status === 302 });
-}
-```
+### Check Running Containers
 
 ```bash
-k6 run smoke.js
+docker compose ps
 ```
 
-Or Apache Bench:
+---
+
+### View Application Logs
 
 ```bash
-ab -n 20000 -c 200 http://localhost:8080/my-link
+docker compose logs -f app
 ```
 
-Watch cache hit ratio and DB CPU as you tune `APP_CACHE_TTL_SECONDS`.
+---
+
+### Stop the Application
+
+```bash
+docker compose down
+```
+
+---
+
+### Stop and Remove Volumes
+
+Use this when you want to reset the local database data:
+
+```bash
+docker compose down -v
+```
+
+---
+
+## Local API Testing
+
+### Create a Short URL
+
+PowerShell:
+
+```powershell
+Invoke-RestMethod -Uri "http://localhost:8080/api/urls" -Method Post -ContentType "application/json" -Body '{"url":"https://github.com"}'
+```
+
+---
+
+### Test Redirect
+
+PowerShell:
+
+```powershell
+curl.exe -i http://localhost:8080/k4tsfOh
+```
+
+Expected result:
+
+```text
+HTTP/1.1 302
+Location: https://github.com
+```
+
+Replace `k4tsfOh` with the short code generated by your application.
+
+---
+
+### Check URL Details
+
+```powershell
+Invoke-RestMethod -Uri "http://localhost:8080/api/urls/k4tsfOh"
+```
+
+---
+
+## Database
+
+The application uses **MySQL 8** for persistent URL and click-related data.
+
+JPA is used for database access and Flyway manages database migrations.
+
+The application connects to the MySQL container through the Docker Compose network.
+
+---
+
+## Redis
+
+Redis is included in the application infrastructure.
+
+The current implementation uses Redis primarily for:
+
+- Distributed rate limiting
+- Bucket4j state storage
+
+Redis is running as a separate Docker Compose service.
+
+### Important implementation note
+
+The redirect lookup method currently reads the `UrlMapping` directly from MySQL rather than using Spring's `@Cacheable` URL-mapping cache.
+
+This was intentionally changed after encountering a Redis deserialization/type-mapping problem where cached objects were returned as `LinkedHashMap` instances instead of `UrlMapping` objects.
+
+The application therefore prioritizes reliable redirect behavior over the previous object-cache implementation.
+
+---
+
+## Rate Limiting
+
+The application uses **Bucket4j with Redis** for distributed rate limiting.
+
+This helps control excessive API traffic and provides a rate-limiting mechanism that can work across multiple application instances when Redis is shared.
+
+---
+
+## URL Expiration
+
+A short URL can optionally have an expiry time.
+
+When an expired URL is requested, the application rejects the redirect instead of forwarding the request to the original destination.
+
+Expired records can also be removed through scheduled cleanup.
+
+---
+
+## Click Tracking
+
+When a short URL is accessed:
+
+1. The short code is resolved.
+2. The application checks whether the URL has expired.
+3. A redirect response is returned.
+4. Click information is recorded.
+5. Click statistics can be retrieved through the analytics endpoint.
+
+The application maintains a click counter for each URL mapping.
+
+---
+
+## Custom Alias Handling
+
+Users can create a custom short code instead of using a generated Base62 code.
+
+Example:
+
+```text
+http://localhost:8080/mygoogle
+```
+
+The application validates aliases and prevents duplicate short codes.
+
+Generated short codes and custom aliases share the same uniqueness requirement.
+
+---
+
+## Optional GeoIP Configuration
+
+The project can optionally use MaxMind GeoIP2 for IP-based location information.
+
+### Setup
+
+1. Create a MaxMind account.
+2. Download the appropriate GeoIP database, such as GeoLite2-City.
+3. Place the database file on your local machine.
+4. Configure the database path using the application's GeoIP environment/property configuration.
+5. Restart the application.
+
+Example environment variable:
+
+```text
+GEOIP_DB_PATH=/path/to/GeoLite2-City.mmdb
+```
+
+GeoIP functionality is optional and is not required for basic URL shortening and redirect functionality.
+
+---
+
+## Environment Configuration
+
+Create your local environment configuration based on the provided example:
+
+```text
+.env.example
+```
+
+Do not commit real passwords, database credentials, API keys, or private configuration values.
+
+The repository should contain only safe example configuration.
 
 ---
 
 ## Project Structure
 
-```
-src/main/java/com/emergent/urlshortener/
-├── UrlShortenerApplication.java
-├── config/          # Redis, OpenAPI, Rate-limit beans
-├── controller/      # UrlController, RedirectController, AnalyticsController
-├── dto/             # Request/response DTOs
-├── exception/       # Custom exceptions + @RestControllerAdvice
-├── filter/          # RateLimitFilter
-├── model/           # JPA entities: UrlMapping, ClickEvent
-├── repository/      # Spring Data repositories
-├── service/         # UrlShortener, Analytics, UserAgent, GeoLocation, ExpiryCleanup
-└── util/            # Base62Encoder
-
-src/main/resources/
-├── application.yml
-└── db/migration/V1__init.sql
+```text
+url-shortener/
+│
+├── src/
+│   ├── main/
+│   │   ├── java/
+│   │   │   └── com/
+│   │   │       └── emergent/
+│   │   │           └── urlshortener/
+│   │   │
+│   │   └── resources/
+│   │
+│   └── test/
+│
+├── Dockerfile
+├── docker-compose.yml
+├── pom.xml
+├── .env.example
+├── .gitignore
+└── README.md
 ```
 
 ---
 
-## Build
+## Build Without Docker
+
+If Java 8 and Maven are installed locally, the project can also be built with Maven.
 
 ```bash
-# Run tests
-mvn test
-
-# Package a fat JAR
-mvn -DskipTests package
-
-# Run the JAR
-java -jar target/url-shortener-1.0.0.jar
+mvn clean package
 ```
+
+The generated JAR will be available under:
+
+```text
+target/
+```
+
+The application can then be started with:
+
+```bash
+java -jar target/*.jar
+```
+
+For local execution, make sure MySQL and Redis are available and the required application configuration is set.
+
+---
+
+## Testing
+
+The application can be tested through:
+
+- Swagger UI
+- PowerShell / cURL
+- REST clients such as Postman
+- Automated unit/integration tests when configured
+
+Example workflow:
+
+```text
+Create URL
+    ↓
+Receive short code
+    ↓
+Open short URL
+    ↓
+302 Redirect
+    ↓
+Click recorded
+    ↓
+View URL details
+    ↓
+View analytics
+```
+
+---
+
+## Example Workflow
+
+### Step 1 — Create URL
+
+```text
+POST /api/urls
+```
+
+Input:
+
+```json
+{
+  "url": "https://github.com"
+}
+```
+
+Response:
+
+```text
+http://localhost:8080/k4tsfOh
+```
+
+### Step 2 — Open Short URL
+
+```text
+GET /k4tsfOh
+```
+
+Result:
+
+```text
+302 → https://github.com
+```
+
+### Step 3 — Check Statistics
+
+```text
+GET /api/urls/k4tsfOh
+```
+
+The response includes the current click count.
+
+### Step 4 — View Analytics
+
+```text
+GET /api/analytics/k4tsfOh
+```
+
+This provides available click analytics and recent click information.
+
+---
+
+## Error Handling
+
+The application handles common URL-shortener scenarios including:
+
+- Invalid URLs
+- Missing short codes
+- Duplicate custom aliases
+- Expired URLs
+- Invalid requests
+- Rate-limit violations
+- Database-related failures
+
+Typical HTTP responses can include:
+
+```text
+200 OK
+201 Created
+302 Found
+400 Bad Request
+404 Not Found
+410 Gone
+429 Too Many Requests
+```
+
+---
+
+## Security Considerations
+
+The project demonstrates backend security and reliability concepts such as:
+
+- Input validation
+- Rate limiting
+- Database constraints
+- Environment-based configuration
+- Avoiding secrets in source control
+- Controlled API access
+- Expiry validation
+
+For a production deployment, additional security hardening would be required depending on the hosting environment and use case.
+
+---
+
+## Development Notes
+
+This project was developed as a backend engineering project to demonstrate practical experience with:
+
+- REST API development
+- Spring Boot
+- Java
+- MySQL
+- Redis
+- JPA/Hibernate
+- Database migrations
+- Distributed rate limiting
+- URL generation
+- Click analytics
+- Docker
+- API documentation
+- Error handling
+- Scheduled background processing
+
+---
+
+## Future Improvements
+
+Possible future improvements include:
+
+- Reintroducing URL mapping caching using a strongly typed Redis serialization strategy
+- Authentication and user accounts
+- Per-user URL management
+- Advanced analytics dashboards
+- QR code generation
+- Better admin monitoring
+- Redis-based caching with verified serialization configuration
+- Production database configuration
+- CI/CD pipeline
+- Automated integration tests
+- Cloud deployment
+- Custom domains
+- More detailed analytics visualizations
+
+---
+
+## Repository
+
+GitHub:
+
+https://github.com/Harshitha0501/url-shortener
 
 ---
 
 ## License
 
-MIT
+This project is licensed under the MIT License.
+
+---
+
+## Author
+
+**Harshitha C.**
+
+GitHub:
+
+https://github.com/Harshitha0501
