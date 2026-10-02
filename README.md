@@ -37,7 +37,6 @@ The project provides REST APIs for creating short URLs, custom aliases, expiry d
 - Spring Boot 2.7.18
 - Spring Web
 - Spring Data JPA
-- Spring Security
 - Hibernate
 - Maven
 
