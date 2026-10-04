@@ -117,6 +117,14 @@ Flyway Migrations
 
 ## Main API Endpoints
 
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/urls` | Create a short URL |
+| GET | `/{shortCode}` | Redirect to the original URL |
+| GET | `/api/urls/{shortCode}` | Get URL details and click count |
+| GET | `/api/analytics/{shortCode}` | View click analytics |
+| DELETE | `/api/urls/{shortCode}` | Delete a short URL |
+
 ### 1. Create Short URL
 
 **POST**
