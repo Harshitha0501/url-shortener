@@ -21,6 +21,17 @@ The project provides REST APIs for creating short URLs, custom aliases, expiry d
 
 ---
 
+## 🚀 Live Demo
+
+**Live API:**  
+https://url-shortener-production-4493.up.railway.app
+
+**Swagger UI:**  
+https://url-shortener-production-4493.up.railway.app/swagger-ui/index.html
+
+**Example Short URL:**  
+https://url-shortener-production-4493.up.railway.app/UZ4MgxF
+
 ## Features
 
 - Create short URLs from long URLs
