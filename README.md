@@ -54,6 +54,14 @@ https://url-shortener-production-4493.up.railway.app/UZ4MgxF
 
 ---
 
+## ☁️ Deployment
+
+- **Platform:** Railway
+- **Application:** Spring Boot
+- **Database:** MySQL
+- **Containerization:** Docker
+- **Public API:** https://url-shortener-production-4493.up.railway.app
+
 ## Tech Stack
 
 ### Backend
