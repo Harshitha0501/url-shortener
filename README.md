@@ -1,6 +1,15 @@
 # URL Shortener with Analytics
 
 <p align="center">
+  <a href="https://url-shortener-production-4493.up.railway.app/swagger-ui/index.html">
+    <img src="https://img.shields.io/badge/Live%20API-Swagger-00C7B7?style=for-the-badge" alt="Live API">
+  </a>
+  <a href="https://url-shortener-production-4493.up.railway.app">
+    <img src="https://img.shields.io/badge/Deployed-Railway-8B5CF6?style=for-the-badge" alt="Deployed on Railway">
+  </a>
+</p>
+
+<p align="center">
   <img src="./url-shortener-banner.png" alt="URL Shortener with Analytics">
 </p>
 
